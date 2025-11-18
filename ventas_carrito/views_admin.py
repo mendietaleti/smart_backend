@@ -16,28 +16,49 @@ logger = logging.getLogger(__name__)
 @method_decorator(csrf_exempt, name='dispatch')
 class GenerarDatosPruebaView(View):
     """
-    Endpoint para generar datos de prueba
-    Solo accesible si el usuario está autenticado
-    
-    Nota: Los headers CORS son manejados por el middleware corsheaders
-    configurado en settings.py. No es necesario agregarlos manualmente.
+    Endpoint administrativo para generar datos de prueba
     """
+    
+    allowed_origins = {
+        'https://smart-frontend-blond.vercel.app',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    }
+    
+    def _add_cors_headers(self, response, request):
+        origin = request.headers.get('Origin')
+        if origin:
+            if origin in self.allowed_origins or origin.endswith('.vercel.app'):
+                response['Access-Control-Allow-Origin'] = origin
+            else:
+                response['Access-Control-Allow-Origin'] = 'https://smart-frontend-blond.vercel.app'
+        response['Access-Control-Allow-Credentials'] = 'true'
+        response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-CSRFToken'
+        response['Vary'] = 'Origin'
+        return response
+    
+    def options(self, request):
+        response = JsonResponse({'success': True})
+        return self._add_cors_headers(response, request)
     
     def get(self, request):
         """Método GET para verificar que el endpoint esté accesible"""
-        return JsonResponse({
+        response = JsonResponse({
             'success': True,
             'message': 'Endpoint de generar datos de prueba está disponible',
             'authenticated': request.session.get('is_authenticated', False)
         })
+        return self._add_cors_headers(response, request)
     
     def post(self, request):
         # Verificar autenticación
         if not request.session.get('is_authenticated'):
-            return JsonResponse({
+            response = JsonResponse({
                 'success': False,
                 'message': 'Debe iniciar sesión'
             }, status=401)
+            return self._add_cors_headers(response, request)
         
         try:
             # Capturar la salida del comando
@@ -99,27 +120,30 @@ class GenerarDatosPruebaView(View):
                     elif 'Ventas:' in line:
                         summary['ventas'] = line.split(':')[-1].strip()
                 
-                return JsonResponse({
+                response = JsonResponse({
                     'success': True,
                     'message': 'Datos generados correctamente',
                     'summary': summary,
                     'output': output,
                     'errors': errors if errors else None
                 })
+                return self._add_cors_headers(response, request)
                 
             except Exception as cmd_error:
                 logger.error(f"Error ejecutando comando generar_datos_prueba: {str(cmd_error)}", exc_info=True)
-                return JsonResponse({
+                response = JsonResponse({
                     'success': False,
                     'message': f'Error al ejecutar el comando: {str(cmd_error)}',
                     'output': out.getvalue(),
                     'errors': err.getvalue()
                 }, status=500)
+                return self._add_cors_headers(response, request)
             
         except Exception as e:
             logger.error(f"Error en GenerarDatosPruebaView: {str(e)}", exc_info=True)
-            return JsonResponse({
+            response = JsonResponse({
                 'success': False,
                 'message': f'Error al generar datos: {str(e)}'
             }, status=500)
+            return self._add_cors_headers(response, request)
 
