@@ -2,7 +2,7 @@
 Vistas administrativas para gestión de datos
 """
 from django.views import View
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.core.management import call_command
@@ -30,20 +30,34 @@ class GenerarDatosPruebaView(View):
         ]
         
         # Verificar si el origen está permitido o es un subdominio de vercel.app
-        if origin in allowed_origins or '.vercel.app' in origin:
+        if origin in allowed_origins or (origin and '.vercel.app' in origin):
             response['Access-Control-Allow-Origin'] = origin
-        else:
+        elif origin:
+            # Si hay un origen pero no está en la lista, usar el de Vercel por defecto
             response['Access-Control-Allow-Origin'] = 'https://smart-frontend-blond.vercel.app'
+        else:
+            # Si no hay origen (petición directa), permitir todos (solo para desarrollo)
+            response['Access-Control-Allow-Origin'] = '*'
         
         response['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, X-CSRFToken'
         response['Access-Control-Allow-Credentials'] = 'true'
         response['Access-Control-Max-Age'] = '86400'
         return response
     
     def options(self, request):
         """Manejar peticiones OPTIONS (preflight) para CORS"""
-        response = JsonResponse({})
+        response = HttpResponse()
+        response['Content-Length'] = '0'
+        return self._add_cors_headers(response, request)
+    
+    def get(self, request):
+        """Método GET para verificar que el endpoint esté accesible"""
+        response = JsonResponse({
+            'success': True,
+            'message': 'Endpoint de generar datos de prueba está disponible',
+            'authenticated': request.session.get('is_authenticated', False)
+        })
         return self._add_cors_headers(response, request)
     
     def post(self, request):
