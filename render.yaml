@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: smart_backend
+    env: python
+    buildCommand: "./build.sh"
+    startCommand: "gunicorn smart_backend.wsgi:application"
+    postDeployCommand: "python manage.py migrate"
