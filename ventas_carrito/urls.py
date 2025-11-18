@@ -24,6 +24,7 @@ urlpatterns = [
     path('comprobantes/generar/', comprobantes_views.ComprobanteView.as_view(), name='generar_comprobante'),
     path('comprobantes/<int:venta_id>/', comprobantes_views.ComprobanteView.as_view(), name='comprobante_detail'),
     path('comprobantes/<int:venta_id>/pdf/', comprobantes_views.ComprobantePDFView.as_view(), name='comprobante_pdf'),
+    path('comprobantes/<int:venta_id>/excel/', comprobantes_views.ComprobanteExcelView.as_view(), name='comprobante_excel'),
     # CU13: Historial de ventas
     path('historial/', historial_views.HistorialVentasView.as_view(), name='historial_ventas'),
     path('historial/filtros/', historial_views.HistorialFiltrosView.as_view(), name='historial_filtros'),

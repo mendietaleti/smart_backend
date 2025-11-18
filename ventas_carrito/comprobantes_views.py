@@ -17,6 +17,9 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.pdfgen import canvas
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from io import BytesIO
 
 from .models import Venta, Comprobante, DetalleVenta
 from autenticacion_usuarios.models import Usuario, Cliente, Bitacora
@@ -544,13 +547,12 @@ class ComprobantePDFView(View):
         try:
             venta = Venta.objects.get(id_venta=venta_id)
             
+            # Si no existe comprobante, generarlo automáticamente
             if not hasattr(venta, 'comprobante'):
-                return JsonResponse({
-                    'success': False,
-                    'message': 'Comprobante no encontrado'
-                }, status=404)
-            
-            comprobante = venta.comprobante
+                comprobante_view = ComprobanteView()
+                comprobante = comprobante_view._generar_comprobante(venta, tipo='factura')
+            else:
+                comprobante = venta.comprobante
             
             # Siempre regenerar el PDF para asegurar el diseño mejorado
             comprobante_view = ComprobanteView()
@@ -577,12 +579,11 @@ class ComprobantePDFView(View):
                     'message': 'Archivo PDF no encontrado'
                 }, status=404)
             
-            # Retornar archivo
-            return FileResponse(
-                open(filepath, 'rb'),
-                content_type='application/pdf',
-                filename=f"comprobante_{comprobante.nro}.pdf"
-            )
+            # Leer el archivo y retornarlo
+            with open(filepath, 'rb') as pdf_file:
+                response = HttpResponse(pdf_file.read(), content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename="factura_{comprobante.nro}.pdf"'
+                return response
             
         except Venta.DoesNotExist:
             return JsonResponse({
@@ -591,6 +592,140 @@ class ComprobantePDFView(View):
             }, status=404)
         except Exception as e:
             logger.error(f"Error en ComprobantePDFView.get: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'success': False,
+                'message': f'Error interno: {str(e)}'
+            }, status=500)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ComprobanteExcelView(View):
+    """Descargar comprobante en formato Excel"""
+    
+    def get(self, request, venta_id):
+        try:
+            venta = Venta.objects.get(id_venta=venta_id)
+            
+            # Generar comprobante si no existe
+            if not hasattr(venta, 'comprobante'):
+                comprobante_view = ComprobanteView()
+                comprobante = comprobante_view._generar_comprobante(venta, tipo='factura')
+            else:
+                comprobante = venta.comprobante
+            
+            # Crear workbook
+            wb = Workbook()
+            ws = wb.active
+            ws.title = "Factura"
+            
+            # Estilos
+            header_fill = PatternFill(start_color="0066FF", end_color="0066FF", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF", size=12)
+            title_font = Font(bold=True, size=16, color="0066FF")
+            
+            # Título
+            ws['A1'] = f"{comprobante.get_tipo_display().upper()}"
+            ws['A1'].font = title_font
+            ws.merge_cells('A1:D1')
+            ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+            ws.row_dimensions[1].height = 30
+            
+            # Información de la empresa
+            row = 3
+            ws[f'A{row}'] = 'SmartSales365'
+            ws[f'A{row}'].font = Font(bold=True, size=14)
+            row += 1
+            ws[f'A{row}'] = 'Sistema de Ventas Inteligente'
+            row += 2
+            
+            # Información del comprobante
+            ws[f'A{row}'] = f'Número: {comprobante.nro}'
+            ws[f'A{row}'].font = Font(bold=True)
+            row += 1
+            ws[f'A{row}'] = f'Fecha: {comprobante.fecha_emision.strftime("%d/%m/%Y %H:%M:%S")}'
+            row += 2
+            
+            # Información del cliente
+            cliente = venta.cliente.id
+            ws[f'A{row}'] = 'Cliente:'
+            ws[f'A{row}'].font = Font(bold=True)
+            row += 1
+            ws[f'A{row}'] = f'{cliente.nombre} {cliente.apellido or ""}'.strip()
+            row += 1
+            ws[f'A{row}'] = f'Email: {cliente.email}'
+            row += 1
+            if cliente.telefono:
+                ws[f'A{row}'] = f'Teléfono: {cliente.telefono}'
+                row += 1
+            if venta.cliente.direccion:
+                ws[f'A{row}'] = f'Dirección: {venta.cliente.direccion}'
+                row += 1
+            row += 1
+            
+            # Tabla de productos
+            ws[f'A{row}'] = 'Producto'
+            ws[f'B{row}'] = 'Cantidad'
+            ws[f'C{row}'] = 'Precio Unitario'
+            ws[f'D{row}'] = 'Subtotal'
+            
+            # Aplicar estilo al encabezado
+            for col in ['A', 'B', 'C', 'D']:
+                cell = ws[f'{col}{row}']
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            row += 1
+            
+            # Detalles de venta
+            detalles = venta.detalles.all()
+            for detalle in detalles:
+                ws[f'A{row}'] = detalle.producto.nombre if detalle.producto else f'Producto #{detalle.producto_id}'
+                ws[f'B{row}'] = detalle.cantidad
+                ws[f'C{row}'] = float(detalle.precio_unitario)
+                ws[f'D{row}'] = float(detalle.subtotal)
+                row += 1
+            
+            # Totales
+            row += 1
+            ws[f'C{row}'] = 'TOTAL:'
+            ws[f'C{row}'].font = Font(bold=True, size=12)
+            ws[f'D{row}'] = float(venta.total)
+            ws[f'D{row}'].font = Font(bold=True, size=12)
+            
+            # Información de pago
+            row += 2
+            ws[f'A{row}'] = f'Método de Pago: Stripe'
+            ws[f'A{row}'].font = Font(bold=True)
+            row += 1
+            ws[f'A{row}'] = f'Estado: {venta.estado.upper()}'
+            
+            # Ajustar ancho de columnas
+            ws.column_dimensions['A'].width = 40
+            ws.column_dimensions['B'].width = 12
+            ws.column_dimensions['C'].width = 18
+            ws.column_dimensions['D'].width = 18
+            
+            # Guardar en buffer
+            buffer = BytesIO()
+            wb.save(buffer)
+            buffer.seek(0)
+            
+            # Retornar archivo
+            response = HttpResponse(
+                buffer,
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename="factura_{comprobante.nro}.xlsx"'
+            return response
+            
+        except Venta.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Venta no encontrada'
+            }, status=404)
+        except Exception as e:
+            logger.error(f"Error en ComprobanteExcelView.get: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
                 'message': f'Error interno: {str(e)}'

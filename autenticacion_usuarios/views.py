@@ -314,6 +314,7 @@ class RegisterView(View):
             # Campos opcionales
             direccion = data.get('direccion', '').strip()
             ciudad = data.get('ciudad', '').strip()
+            tipo_cuenta = data.get('tipoCuenta', 'Cliente').strip()
             
             # Validaciones básicas
             if not nombre:
@@ -354,11 +355,19 @@ class RegisterView(View):
                     'message': 'Este email ya está registrado'
                 }, status=400)
             
-            # Obtener o crear rol de Cliente
+            # Validar y obtener rol
+            tipo_cuenta_normalizado = tipo_cuenta.capitalize()
+            if tipo_cuenta_normalizado not in ['Cliente', 'Administrador']:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Tipo de cuenta inválido. Debe ser Cliente o Administrador'
+                }, status=400)
+            
+            # Obtener o crear rol
             try:
-                rol_cliente = Rol.objects.get(nombre='Cliente')
+                rol = Rol.objects.get(nombre=tipo_cuenta_normalizado)
             except Rol.DoesNotExist:
-                rol_cliente = Rol.objects.create(nombre='Cliente')
+                rol = Rol.objects.create(nombre=tipo_cuenta_normalizado)
             
             # Crear usuario
             usuario = Usuario.objects.create(
@@ -366,7 +375,7 @@ class RegisterView(View):
                 apellido=apellido,
                 email=email,
                 telefono=telefono,
-                id_rol=rol_cliente,
+                id_rol=rol,
                 estado=True
             )
             
@@ -374,30 +383,34 @@ class RegisterView(View):
             usuario.set_password(contrasena)
             usuario.save()
             
-            # Crear registro de cliente usando get_or_create para evitar duplicados
-            cliente, created = Cliente.objects.get_or_create(
-                id=usuario,
-                defaults={
-                    'direccion': direccion,
-                    'ciudad': ciudad
-                }
-            )
-            
-            # Si ya existía, actualizar datos
-            if not created:
-                cliente.direccion = direccion
-                cliente.ciudad = ciudad
-                cliente.save()
+            # Solo crear registro de cliente si el rol es Cliente
+            if tipo_cuenta_normalizado == 'Cliente':
+                cliente, created = Cliente.objects.get_or_create(
+                    id=usuario,
+                    defaults={
+                        'direccion': direccion,
+                        'ciudad': ciudad
+                    }
+                )
+                
+                # Si ya existía, actualizar datos
+                if not created:
+                    cliente.direccion = direccion
+                    cliente.ciudad = ciudad
+                    cliente.save()
             
             # Obtener IP del cliente
             ip_address = self.get_client_ip(request)
             
             # Registrar en bitácora
+            accion_bitacora = 'REGISTRO_CLIENTE' if tipo_cuenta_normalizado == 'Cliente' else 'REGISTRO_ADMINISTRADOR'
+            descripcion_bitacora = f'Nuevo {tipo_cuenta_normalizado.lower()} registrado: {usuario.nombre} {usuario.apellido}'
+            
             Bitacora.objects.create(
                 id_usuario=usuario,
-                accion='REGISTRO_CLIENTE',
+                accion=accion_bitacora,
                 modulo='AUTENTICACION',
-                descripcion=f'Nuevo cliente registrado: {usuario.nombre} {usuario.apellido}',
+                descripcion=descripcion_bitacora,
                 ip=ip_address
             )
             
@@ -405,23 +418,32 @@ class RegisterView(View):
             request.session['user_id'] = usuario.id
             request.session['user_email'] = usuario.email
             request.session['user_nombre'] = usuario.nombre
-            request.session['user_rol'] = 'Cliente'
+            request.session['user_rol'] = tipo_cuenta_normalizado
             request.session['is_authenticated'] = True
 
+            # Preparar respuesta
+            user_response = {
+                'id': usuario.id,
+                'nombre': usuario.nombre,
+                'apellido': usuario.apellido,
+                'email': usuario.email,
+                'telefono': usuario.telefono,
+                'rol': tipo_cuenta_normalizado
+            }
+            
+            # Agregar datos de cliente solo si es cliente
+            if tipo_cuenta_normalizado == 'Cliente':
+                cliente = Cliente.objects.get(id=usuario)
+                user_response['direccion'] = cliente.direccion
+                user_response['ciudad'] = cliente.ciudad
+            
+            mensaje_exito = f'Cuenta de {tipo_cuenta_normalizado.lower()} creada exitosamente'
+            
             # Respuesta exitosa
             return JsonResponse({
                 'success': True,
-                'message': 'Cuenta de cliente creada exitosamente',
-                'user': {
-                    'id': usuario.id,
-                    'nombre': usuario.nombre,
-                    'apellido': usuario.apellido,
-                    'email': usuario.email,
-                    'telefono': usuario.telefono,
-                    'direccion': cliente.direccion,
-                    'ciudad': cliente.ciudad,
-                    'rol': 'Cliente'
-                }
+                'message': mensaje_exito,
+                'user': user_response
             }, status=201)
             
         except json.JSONDecodeError:

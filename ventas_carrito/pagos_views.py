@@ -134,8 +134,8 @@ class PagoOnlineView(View):
             # Simular procesamiento de pago (en producción sería con pasarela real)
             resultado_pago = self._procesar_pago_simulado(numero_tarjeta, fecha_vencimiento, cvv, venta.total)
             
-            # Obtener o crear método de pago
-            metodo_pago, _ = MetodoPago.objects.get_or_create(nombre='tarjeta_credito')
+            # Obtener o crear método de pago - SOLO Stripe
+            metodo_pago, _ = MetodoPago.objects.get_or_create(nombre='Stripe')
             
             # Crear registro de pago
             referencia = self._generar_referencia()
@@ -154,7 +154,7 @@ class PagoOnlineView(View):
             # Si el pago fue exitoso, actualizar estado de la venta
             if resultado_pago['estado'] == 'exitoso':
                 venta.estado = 'completada'
-                venta.metodo_pago = 'tarjeta_credito'
+                venta.metodo_pago = 'stripe'  # SOLO Stripe permitido
                 venta.save()
             
             # Registrar en bitácora

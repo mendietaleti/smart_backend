@@ -59,6 +59,8 @@ class EstadoModeloView(View):
             proxima_actualizacion = None
             if modelo.fecha_ultima_actualizacion:
                 proxima_actualizacion = modelo.fecha_ultima_actualizacion + timedelta(days=7)
+            elif modelo.fecha_entrenamiento:
+                proxima_actualizacion = modelo.fecha_entrenamiento + timedelta(days=7)
             
             # Contar ventas históricas disponibles
             ventas_totales = Venta.objects.filter(estado='completada').count()
@@ -89,7 +91,7 @@ class EstadoModeloView(View):
                 },
                 'datos_disponibles': {
                     'ventas_totales': ventas_totales,
-                    'suficientes_datos': ventas_totales >= 50  # Mínimo 50 ventas para entrenar
+                    'suficientes_datos': ventas_totales >= 5  # Mínimo 5 ventas para entrenar
                 }
             }, status=200)
             
@@ -154,12 +156,12 @@ class EntrenarModeloView(View):
                     'message': 'Ya hay un entrenamiento en curso'
                 }, status=400)
             
-            # Verificar datos suficientes
+            # Verificar datos suficientes (reducido a 5 para facilitar el uso)
             ventas_count = Venta.objects.filter(estado='completada').count()
-            if ventas_count < 10:
+            if ventas_count < 5:
                 return JsonResponse({
                     'success': False,
-                    'message': f'Datos insuficientes. Se requieren al menos 10 ventas, actualmente hay {ventas_count}'
+                    'message': f'Datos insuficientes. Se requieren al menos 5 ventas, actualmente hay {ventas_count}'
                 }, status=400)
             
             # Iniciar entrenamiento en segundo plano
@@ -233,7 +235,14 @@ class EntrenarModeloView(View):
             modelo.rmse = rmse
             modelo.mae = mae
             modelo.registros_entrenamiento = total_ventas
-            modelo.version = f"{float(modelo.version) + 0.1:.1f}"
+            
+            # Actualizar versión de forma segura
+            try:
+                version_actual = float(modelo.version) if modelo.version else 1.0
+                modelo.version = f"{version_actual + 0.1:.1f}"
+            except (ValueError, TypeError):
+                modelo.version = '1.0'
+            
             modelo.descripcion = f"Modelo entrenado con {total_ventas} ventas históricas"
             modelo.proxima_actualizacion = timezone.now() + timedelta(days=7)
             modelo.save()
@@ -383,7 +392,14 @@ class ActualizarModeloView(View):
             modelo.rmse = round(rmse, 2)
             modelo.mae = round(mae, 2)
             modelo.registros_entrenamiento = total_ventas
-            modelo.version = f"{float(modelo.version) + 0.1:.1f}"
+            
+            # Actualizar versión de forma segura
+            try:
+                version_actual = float(modelo.version) if modelo.version else 1.0
+                modelo.version = f"{version_actual + 0.1:.1f}"
+            except (ValueError, TypeError):
+                modelo.version = '1.0'
+            
             modelo.descripcion = f"Modelo actualizado con {total_ventas} ventas (última actualización: {timezone.now().strftime('%Y-%m-%d %H:%M')})"
             modelo.proxima_actualizacion = timezone.now() + timedelta(days=7)
             modelo.save()
@@ -495,7 +511,15 @@ class GenerarPrediccionesView(View):
             # Obtener parámetros
             periodo = data.get('periodo', 'mes')  # 'mes', 'semana', 'dia'
             meses_futuros = data.get('meses_futuros', 3)  # Cuántos meses predecir
-            categoria_id = data.get('categoria_id', None)  # Opcional: filtrar por categoría
+            categoria_id = data.get('categoria_id')  # Opcional: filtrar por categoría
+            # Convertir a None si es string vacío o 0
+            if categoria_id == '' or categoria_id == 0:
+                categoria_id = None
+            elif categoria_id is not None:
+                try:
+                    categoria_id = int(categoria_id)
+                except (ValueError, TypeError):
+                    categoria_id = None
             guardar = data.get('guardar', True)  # Si guardar las predicciones en BD
             
             # Verificar que existe un modelo entrenado y activo
@@ -577,7 +601,8 @@ class GenerarPrediccionesView(View):
             
             # Generar predicciones
             predicciones = []
-            fecha_prediccion = fecha_actual.date()  # Convertir a date para predicciones
+            # Usar fecha actual como punto de partida, comenzando desde mañana
+            fecha_prediccion = (fecha_actual + timedelta(days=1)).date()  # Convertir a date para predicciones
             
             # Ajustar según período solicitado
             if periodo == 'semana':
@@ -587,6 +612,7 @@ class GenerarPrediccionesView(View):
                 incremento = timedelta(days=1)
                 meses_futuros = min(meses_futuros, 30)  # Máximo 30 días
             else:  # mes
+                # Para meses, usar incremento de aproximadamente 30 días
                 incremento = timedelta(days=30)
                 meses_futuros = min(meses_futuros, 12)  # Máximo 12 meses
             
@@ -635,9 +661,16 @@ class GenerarPrediccionesView(View):
                         confianza=round(confianza, 3)
                     )
                 
+                # Formatear fecha correctamente con hora actual
+                # Usar datetime actual para mostrar la hora correcta
+                fecha_actual_dt = timezone.now()
+                fecha_prediccion_str = fecha_prediccion.isoformat() if hasattr(fecha_prediccion, 'isoformat') else str(fecha_prediccion)
+                fecha_ejecucion_str = fecha_actual_dt.isoformat()
+                
                 predicciones.append({
                     'id': prediccion_obj.id_prediccion if prediccion_obj else None,
-                    'fecha_prediccion': fecha_prediccion.isoformat(),
+                    'fecha_prediccion': fecha_prediccion_str,
+                    'fecha_ejecucion': fecha_ejecucion_str,  # Incluir hora de ejecución
                     'valor_predicho': round(valor_predicho, 2),
                     'confianza': round(confianza, 3),
                     'categoria': {
@@ -710,8 +743,12 @@ class GenerarPrediccionesView(View):
             predicciones = PrediccionVenta.objects.all().select_related('categoria', 'modelo')
             
             if categoria_id:
-                # Usar el campo correcto del ForeignKey (id_categoria en la BD)
-                predicciones = predicciones.filter(categoria__id_categoria=categoria_id)
+                try:
+                    categoria_id_int = int(categoria_id)
+                    # Usar el campo correcto del ForeignKey (id_categoria en la BD)
+                    predicciones = predicciones.filter(categoria__id_categoria=categoria_id_int)
+                except (ValueError, TypeError):
+                    pass  # Si no es un número válido, no filtrar
             
             if fecha_desde:
                 try:

@@ -55,7 +55,7 @@ class Venta(models.Model):
     fecha_venta = models.DateTimeField(auto_now_add=True)
     total = models.DecimalField(max_digits=10, decimal_places=2)
     estado = models.CharField(max_length=20, default='pendiente')  # pendiente, completada, cancelada
-    metodo_pago = models.CharField(max_length=50, default='efectivo')  # efectivo, tarjeta, transferencia
+    metodo_pago = models.CharField(max_length=50, default='stripe')  # SOLO stripe
     direccion_entrega = models.CharField(max_length=255, blank=True, null=True)
     notas = models.TextField(blank=True, null=True)
     

@@ -1536,38 +1536,64 @@ class DescargarReporteView(View):
                             
                             # Si no es admin, excluir columnas administrativas
                             if not es_admin:
-                                excluir_columnas.extend(['estado', 'metodo_pago', 'cliente_email', 'cliente_telefono', 'cliente_direccion'])
+                                excluir_columnas.extend(['estado', 'metodo_pago', 'metodo_pago_display', 'cliente_email', 'cliente_telefono', 'cliente_direccion'])
                             
                             # Prioridades para columnas principales - NOMBRE SIEMPRE PRIMERO cuando hay productos
+                            # NOTA: Preferir siempre versiones _display o _formateado sobre originales
                             if 'nombre' in headers_principales:
                                 prioridades = ['nombre', 'fecha', 'total', 'precio_total', 'precio_unitario', 'cantidad', 'categoria', 'cliente_nombre']
                             else:
                                 prioridades = ['nombre', 'fecha', 'total', 'precio_total', 'precio_unitario', 'cantidad', 'categoria', 'cliente_nombre']
                             
-                            # Si es admin, agregar columnas administrativas
+                            # Si es admin, agregar columnas administrativas (sin método de pago - todas son Stripe)
+                            # Preferir estado_display sobre estado
                             if es_admin:
-                                prioridades.extend(['estado', 'metodo_pago', 'cliente_email', 'cliente_telefono'])
+                                prioridades.extend(['estado_display', 'cliente_email', 'cliente_telefono'])
                             
                             # SIEMPRE incluir 'nombre' primero si existe
                             if 'nombre' in headers_principales and 'nombre' not in excluir_columnas:
                                 columnas_principales.append('nombre')
                             
-                            # Luego agregar otras prioridades
-                            for h in prioridades:
-                                if h != 'nombre' and h in headers_principales and h not in excluir_columnas and h not in columnas_principales:
-                                    columnas_principales.append(h)
+                            # Luego agregar otras prioridades (preferir versiones formateadas)
+                            # Primero agregar estado_display si existe, no estado
+                            if 'estado_display' in headers_principales and 'estado_display' not in excluir_columnas:
+                                if 'estado_display' not in columnas_principales:
+                                    columnas_principales.append('estado_display')
                             
-                            # Luego agregar otras columnas formateadas
+                            for h in prioridades:
+                                if h != 'nombre' and h != 'estado':  # Excluir estado si ya tenemos estado_display
+                                    if h in headers_principales and h not in excluir_columnas and h not in columnas_principales:
+                                        # Si es estado y ya tenemos estado_display, saltar
+                                        if h == 'estado' and 'estado_display' in columnas_principales:
+                                            continue
+                                        columnas_principales.append(h)
+                            
+                            # Luego agregar otras columnas formateadas (evitando duplicados)
                             for h in headers_principales:
                                 if h not in columnas_principales and h not in excluir_columnas:
                                     # Priorizar versiones formateadas
                                     if any(h.endswith(sufijo) for sufijo in ['_formateado', '_display', '_nombre']):
                                         base = h.replace('_formateado', '').replace('_display', '').replace('_nombre', '')
-                                        if base not in [c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') for c in columnas_principales]:
+                                        # Verificar que no exista ya la base o la versión formateada
+                                        existe_base = any(c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') == base for c in columnas_principales)
+                                        if not existe_base:
                                             columnas_principales.append(h)
                                     elif not any(h.startswith(ex) or h == ex for ex in excluir_columnas):
-                                        if not any(c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') == h for c in columnas_principales):
+                                        # Verificar que no exista una versión formateada de esta columna
+                                        tiene_formateado = any(c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') == h for c in columnas_principales)
+                                        if not tiene_formateado:
                                             columnas_principales.append(h)
+                            
+                            # Limpieza final: eliminar duplicados explícitos
+                            # Si hay estado_display, eliminar estado
+                            if 'estado_display' in columnas_principales and 'estado' in columnas_principales:
+                                columnas_principales.remove('estado')
+                            # Si hay total_formateado, eliminar total
+                            if 'total_formateado' in columnas_principales and 'total' in columnas_principales:
+                                columnas_principales.remove('total')
+                            # Si hay fecha, eliminar fecha_iso
+                            if 'fecha' in columnas_principales and 'fecha_iso' in columnas_principales:
+                                columnas_principales.remove('fecha_iso')
                             
                             # Si no hay suficientes columnas, agregar algunas básicas
                             if len(columnas_principales) < 2:
@@ -1873,38 +1899,64 @@ class DescargarReporteView(View):
                             
                             # Si no es admin, excluir columnas administrativas
                             if not es_admin:
-                                excluir_columnas.extend(['estado', 'metodo_pago', 'cliente_email', 'cliente_telefono', 'cliente_direccion'])
+                                excluir_columnas.extend(['estado', 'metodo_pago', 'metodo_pago_display', 'cliente_email', 'cliente_telefono', 'cliente_direccion'])
                             
                             # Prioridades para columnas principales
+                            # NOTA: Preferir siempre versiones _display o _formateado sobre originales
                             if 'nombre' in headers_principales:
                                 prioridades = ['nombre', 'fecha', 'total', 'precio_total', 'precio_unitario', 'cantidad', 'categoria', 'cliente_nombre']
                             else:
                                 prioridades = ['nombre', 'fecha', 'total', 'precio_total', 'precio_unitario', 'cantidad', 'categoria', 'cliente_nombre']
                             
-                            # Si es admin, agregar columnas administrativas
+                            # Si es admin, agregar columnas administrativas (sin método de pago - todas son Stripe)
+                            # Preferir estado_display sobre estado
                             if es_admin:
-                                prioridades.extend(['estado', 'metodo_pago', 'cliente_email', 'cliente_telefono'])
+                                prioridades.extend(['estado_display', 'cliente_email', 'cliente_telefono'])
                             
                             # SIEMPRE incluir 'nombre' primero si existe
                             if 'nombre' in headers_principales and 'nombre' not in excluir_columnas:
                                 columnas_principales.append('nombre')
                             
-                            # Luego agregar otras prioridades
-                            for h in prioridades:
-                                if h != 'nombre' and h in headers_principales and h not in excluir_columnas and h not in columnas_principales:
-                                    columnas_principales.append(h)
+                            # Luego agregar otras prioridades (preferir versiones formateadas)
+                            # Primero agregar estado_display si existe, no estado
+                            if 'estado_display' in headers_principales and 'estado_display' not in excluir_columnas:
+                                if 'estado_display' not in columnas_principales:
+                                    columnas_principales.append('estado_display')
                             
-                            # Luego agregar otras columnas formateadas
+                            for h in prioridades:
+                                if h != 'nombre' and h != 'estado':  # Excluir estado si ya tenemos estado_display
+                                    if h in headers_principales and h not in excluir_columnas and h not in columnas_principales:
+                                        # Si es estado y ya tenemos estado_display, saltar
+                                        if h == 'estado' and 'estado_display' in columnas_principales:
+                                            continue
+                                        columnas_principales.append(h)
+                            
+                            # Luego agregar otras columnas formateadas (evitando duplicados)
                             for h in headers_principales:
                                 if h not in columnas_principales and h not in excluir_columnas:
                                     # Priorizar versiones formateadas
                                     if any(h.endswith(sufijo) for sufijo in ['_formateado', '_display', '_nombre']):
                                         base = h.replace('_formateado', '').replace('_display', '').replace('_nombre', '')
-                                        if base not in [c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') for c in columnas_principales]:
+                                        # Verificar que no exista ya la base o la versión formateada
+                                        existe_base = any(c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') == base for c in columnas_principales)
+                                        if not existe_base:
                                             columnas_principales.append(h)
                                     elif not any(h.startswith(ex) or h == ex for ex in excluir_columnas):
-                                        if not any(c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') == h for c in columnas_principales):
+                                        # Verificar que no exista una versión formateada de esta columna
+                                        tiene_formateado = any(c.replace('_formateado', '').replace('_display', '').replace('_nombre', '') == h for c in columnas_principales)
+                                        if not tiene_formateado:
                                             columnas_principales.append(h)
+                            
+                            # Limpieza final: eliminar duplicados explícitos
+                            # Si hay estado_display, eliminar estado
+                            if 'estado_display' in columnas_principales and 'estado' in columnas_principales:
+                                columnas_principales.remove('estado')
+                            # Si hay total_formateado, eliminar total
+                            if 'total_formateado' in columnas_principales and 'total' in columnas_principales:
+                                columnas_principales.remove('total')
+                            # Si hay fecha, eliminar fecha_iso
+                            if 'fecha' in columnas_principales and 'fecha_iso' in columnas_principales:
+                                columnas_principales.remove('fecha_iso')
                             
                             # Si no hay suficientes columnas, agregar algunas básicas
                             if len(columnas_principales) < 3:

@@ -27,7 +27,7 @@ class CheckoutView(View):
             'required_fields': ['metodo_pago', 'direccion_entrega'],
             'optional_fields': ['notas'],
             'example': {
-                'metodo_pago': 'stripe',
+                'metodo_pago': 'stripe',  # ÚNICO método permitido
                 'direccion_entrega': 'Calle 123, #45, Ciudad',
                 'notas': 'Entregar en horario de oficina'
             },
@@ -45,7 +45,8 @@ class CheckoutView(View):
             
             # Obtener datos del request
             data = json.loads(request.body)
-            metodo_pago = data.get('metodo_pago', 'stripe')  # Solo Stripe
+            # FORZAR que siempre sea Stripe - no se acepta otro método
+            metodo_pago = 'stripe'  # SOLO Stripe permitido
             direccion_entrega = data.get('direccion_entrega', '')
             notas = data.get('notas', '')
             
