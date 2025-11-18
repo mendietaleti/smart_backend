@@ -9,6 +9,7 @@ from django.core.management import call_command
 from io import StringIO
 import json
 import logging
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,31 @@ class GenerarDatosPruebaView(View):
         })
         return self._add_cors_headers(response, request)
     
+    def _is_authorized(self, request):
+        """Validar si la petición tiene sesión válida o token"""
+        if request.session.get('is_authenticated'):
+            return True
+        
+        token_header = request.headers.get('X-Data-Token') or request.headers.get('Authorization')
+        query_token = request.GET.get('token') or request.POST.get('token')
+        configured_token = getattr(settings, 'DATA_GENERATION_TOKEN', '')
+        
+        if not configured_token:
+            return False
+        
+        if token_header:
+            token_header = token_header.replace('Bearer ', '').strip()
+            if token_header == configured_token:
+                return True
+        
+        if query_token and query_token == configured_token:
+            return True
+        
+        return False
+    
     def post(self, request):
-        # Verificar autenticación
-        if not request.session.get('is_authenticated'):
+        # Verificar autenticación o token
+        if not self._is_authorized(request):
             response = JsonResponse({
                 'success': False,
                 'message': 'Debe iniciar sesión'

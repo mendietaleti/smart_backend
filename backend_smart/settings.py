@@ -29,6 +29,9 @@ STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
 
+# Token opcional para generar datos de prueba sin sesión (Render)
+DATA_GENERATION_TOKEN = config('DATA_GENERATION_TOKEN', default='')
+
 # Render asigna su dominio en producción
 ALLOWED_HOSTS = ['*']
 
