@@ -2,7 +2,7 @@
 Vistas administrativas para gestión de datos
 """
 from django.views import View
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.core.management import call_command
@@ -18,71 +18,26 @@ class GenerarDatosPruebaView(View):
     """
     Endpoint para generar datos de prueba
     Solo accesible si el usuario está autenticado
+    
+    Nota: Los headers CORS son manejados por el middleware corsheaders
+    configurado en settings.py. No es necesario agregarlos manualmente.
     """
-    
-    def dispatch(self, request, *args, **kwargs):
-        """Override dispatch para manejar OPTIONS antes que Django"""
-        if request.method == 'OPTIONS':
-            return self.options(request)
-        return super().dispatch(request, *args, **kwargs)
-    
-    def _add_cors_headers(self, response, request):
-        """Agregar headers CORS a la respuesta"""
-        origin = request.headers.get('Origin', '')
-        allowed_origins = [
-            'https://smart-frontend-blond.vercel.app',
-            'http://localhost:5173',
-            'http://127.0.0.1:5173'
-        ]
-        
-        # IMPORTANTE: Cuando Access-Control-Allow-Credentials es 'true',
-        # NO podemos usar '*' en Access-Control-Allow-Origin
-        # Debemos usar un origen específico
-        
-        # Verificar si el origen está permitido o es un subdominio de vercel.app
-        if origin in allowed_origins:
-            response['Access-Control-Allow-Origin'] = origin
-        elif origin and '.vercel.app' in origin:
-            # Permitir cualquier subdominio de vercel.app
-            response['Access-Control-Allow-Origin'] = origin
-        elif origin:
-            # Si hay un origen pero no está en la lista, usar el de Vercel por defecto
-            response['Access-Control-Allow-Origin'] = 'https://smart-frontend-blond.vercel.app'
-        else:
-            # Si no hay origen (petición directa), usar el de Vercel por defecto
-            # NO usar '*' porque tenemos credentials: true
-            response['Access-Control-Allow-Origin'] = 'https://smart-frontend-blond.vercel.app'
-        
-        response['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, X-CSRFToken'
-        response['Access-Control-Allow-Credentials'] = 'true'
-        response['Access-Control-Max-Age'] = '86400'
-        return response
-    
-    def options(self, request):
-        """Manejar peticiones OPTIONS (preflight) para CORS"""
-        response = HttpResponse(status=200)
-        response['Content-Length'] = '0'
-        response['Content-Type'] = 'text/plain'
-        return self._add_cors_headers(response, request)
     
     def get(self, request):
         """Método GET para verificar que el endpoint esté accesible"""
-        response = JsonResponse({
+        return JsonResponse({
             'success': True,
             'message': 'Endpoint de generar datos de prueba está disponible',
             'authenticated': request.session.get('is_authenticated', False)
         })
-        return self._add_cors_headers(response, request)
     
     def post(self, request):
         # Verificar autenticación
         if not request.session.get('is_authenticated'):
-            response = JsonResponse({
+            return JsonResponse({
                 'success': False,
                 'message': 'Debe iniciar sesión'
             }, status=401)
-            return self._add_cors_headers(response, request)
         
         try:
             # Capturar la salida del comando
@@ -144,30 +99,27 @@ class GenerarDatosPruebaView(View):
                     elif 'Ventas:' in line:
                         summary['ventas'] = line.split(':')[-1].strip()
                 
-                response = JsonResponse({
+                return JsonResponse({
                     'success': True,
                     'message': 'Datos generados correctamente',
                     'summary': summary,
                     'output': output,
                     'errors': errors if errors else None
                 })
-                return self._add_cors_headers(response, request)
                 
             except Exception as cmd_error:
                 logger.error(f"Error ejecutando comando generar_datos_prueba: {str(cmd_error)}", exc_info=True)
-                response = JsonResponse({
+                return JsonResponse({
                     'success': False,
                     'message': f'Error al ejecutar el comando: {str(cmd_error)}',
                     'output': out.getvalue(),
                     'errors': err.getvalue()
                 }, status=500)
-                return self._add_cors_headers(response, request)
             
         except Exception as e:
             logger.error(f"Error en GenerarDatosPruebaView: {str(e)}", exc_info=True)
-            response = JsonResponse({
+            return JsonResponse({
                 'success': False,
                 'message': f'Error al generar datos: {str(e)}'
             }, status=500)
-            return self._add_cors_headers(response, request)
 
