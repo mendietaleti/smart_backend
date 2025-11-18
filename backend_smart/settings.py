@@ -80,20 +80,54 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://*.vercel.app",
+    "https://smart-frontend-blond.vercel.app",
+]
+
+# Permitir todos los subdominios de Vercel (para previews y producción)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://smart-frontend-blond.vercel.app",
     "https://*.vercel.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
-SESSION_COOKIE_SAMESITE = "Lax"
+# Headers adicionales permitidos
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# Métodos permitidos
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Configuración de cookies para CORS cross-origin
+# En producción (HTTPS), usar SameSite=None; en desarrollo, usar Lax
+SESSION_COOKIE_SECURE = not DEBUG  # True en producción (HTTPS requerido)
+CSRF_COOKIE_SECURE = not DEBUG  # True en producción (HTTPS requerido)
+SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"  # None para CORS cross-origin en producción
+CSRF_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"  # None para CORS cross-origin en producción
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # False para que JavaScript pueda leerlo si es necesario
 
 
 # -------------------------------
