@@ -20,6 +20,12 @@ class GenerarDatosPruebaView(View):
     Solo accesible si el usuario está autenticado
     """
     
+    def dispatch(self, request, *args, **kwargs):
+        """Override dispatch para manejar OPTIONS antes que Django"""
+        if request.method == 'OPTIONS':
+            return self.options(request)
+        return super().dispatch(request, *args, **kwargs)
+    
     def _add_cors_headers(self, response, request):
         """Agregar headers CORS a la respuesta"""
         origin = request.headers.get('Origin', '')
@@ -29,15 +35,23 @@ class GenerarDatosPruebaView(View):
             'http://127.0.0.1:5173'
         ]
         
+        # IMPORTANTE: Cuando Access-Control-Allow-Credentials es 'true',
+        # NO podemos usar '*' en Access-Control-Allow-Origin
+        # Debemos usar un origen específico
+        
         # Verificar si el origen está permitido o es un subdominio de vercel.app
-        if origin in allowed_origins or (origin and '.vercel.app' in origin):
+        if origin in allowed_origins:
+            response['Access-Control-Allow-Origin'] = origin
+        elif origin and '.vercel.app' in origin:
+            # Permitir cualquier subdominio de vercel.app
             response['Access-Control-Allow-Origin'] = origin
         elif origin:
             # Si hay un origen pero no está en la lista, usar el de Vercel por defecto
             response['Access-Control-Allow-Origin'] = 'https://smart-frontend-blond.vercel.app'
         else:
-            # Si no hay origen (petición directa), permitir todos (solo para desarrollo)
-            response['Access-Control-Allow-Origin'] = '*'
+            # Si no hay origen (petición directa), usar el de Vercel por defecto
+            # NO usar '*' porque tenemos credentials: true
+            response['Access-Control-Allow-Origin'] = 'https://smart-frontend-blond.vercel.app'
         
         response['Access-Control-Allow-Methods'] = 'POST, OPTIONS, GET'
         response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, X-CSRFToken'
@@ -47,8 +61,9 @@ class GenerarDatosPruebaView(View):
     
     def options(self, request):
         """Manejar peticiones OPTIONS (preflight) para CORS"""
-        response = HttpResponse()
+        response = HttpResponse(status=200)
         response['Content-Length'] = '0'
+        response['Content-Type'] = 'text/plain'
         return self._add_cors_headers(response, request)
     
     def get(self, request):
