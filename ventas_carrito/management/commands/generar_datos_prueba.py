@@ -4,7 +4,7 @@ Genera categorías, productos, clientes y ventas históricas de los últimos 2 m
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from datetime import timedelta, datetime
 import random
 
@@ -345,20 +345,32 @@ class Command(BaseCommand):
                 usuario.set_password(password)
                 usuario.save()
             
-            # Crear cliente
-            cliente, created = Cliente.objects.get_or_create(
-                id=usuario,
-                defaults={
-                    'direccion': f'Calle {random.randint(1, 100)} #{random.randint(1, 500)}',
-                    'ciudad': random.choice(ciudades)
-                }
-            )
+            direccion = f'Calle {random.randint(1, 100)} #{random.randint(1, 500)}'
+            ciudad = random.choice(ciudades)
+            
+            try:
+                cliente = Cliente.objects.get(id=usuario)
+                cliente_creado = False
+            except Cliente.DoesNotExist:
+                try:
+                    with transaction.atomic():
+                        cliente = Cliente.objects.create(
+                            id=usuario,
+                            direccion=direccion,
+                            ciudad=ciudad
+                        )
+                    cliente_creado = True
+                except IntegrityError:
+                    # Si otro proceso lo creó en paralelo, obtenerlo
+                    cliente = Cliente.objects.get(id=usuario)
+                    cliente_creado = False
+            
             clientes.append(cliente)
             clientes_info.append({
                 'email': email,
                 'password': password,
                 'nombre': f'{nombre} {apellido}',
-                'existe': False
+                'existe': not cliente_creado
             })
         
         # Mostrar credenciales de los clientes creados
