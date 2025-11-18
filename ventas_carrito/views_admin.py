@@ -35,7 +35,7 @@ class GenerarDatosPruebaView(View):
                 response['Access-Control-Allow-Origin'] = 'https://smart-frontend-blond.vercel.app'
         response['Access-Control-Allow-Credentials'] = 'true'
         response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-CSRFToken'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-CSRFToken, X-Data-Token'
         response['Vary'] = 'Origin'
         return response
     
