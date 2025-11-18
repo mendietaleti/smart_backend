@@ -5,6 +5,7 @@ from . import pagos_views
 from . import comprobantes_views
 from . import historial_views
 from . import stripe_views
+from . import views_admin
 
 app_name = 'ventas_carrito'
 
@@ -31,4 +32,6 @@ urlpatterns = [
     path('historial/agregado/', historial_views.HistorialAgregadoView.as_view(), name='historial_agregado'),
     path('historial/sincronizar/', historial_views.SincronizarHistorialView.as_view(), name='sincronizar_historial'),
     path('dashboard/stats/', historial_views.DashboardStatsView.as_view(), name='dashboard_stats'),
+    # Endpoint administrativo para generar datos de prueba
+    path('admin/generar-datos-prueba/', views_admin.GenerarDatosPruebaView.as_view(), name='generar_datos_prueba'),
 ]
