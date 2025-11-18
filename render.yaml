@@ -3,6 +3,6 @@ services:
     name: smart_backend
     env: python
     buildCommand: "./build.sh"
-    startCommand: "gunicorn smart_backend.wsgi:application"
+    startCommand: "gunicorn backend_smart.wsgi:application"
     postDeployCommand: "python manage.py migrate --noinput"
 
