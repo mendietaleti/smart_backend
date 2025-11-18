@@ -88,6 +88,13 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https://.*\.vercel\.app$",
 ]
 
+# Si DEBUG está activo, permitir todos los orígenes (solo para desarrollo)
+# En producción, usar solo los orígenes específicos arriba
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = False  # Mantener False incluso en DEBUG para seguridad
+else:
+    CORS_ALLOW_ALL_ORIGINS = False  # Siempre False en producción
+
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -119,6 +126,9 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+# Configuración adicional para asegurar que CORS funcione
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 horas
 
 # Configuración de cookies para CORS cross-origin
 # En producción (HTTPS), usar SameSite=None; en desarrollo, usar Lax
